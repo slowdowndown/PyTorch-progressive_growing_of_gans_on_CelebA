@@ -92,11 +92,14 @@ class PGGAN():
     def create_criterion(self):
         # w is for gan
         if self.opts['gan'] == 'lsgan':
-            self.adv_criterion = lambda p,t,w: torch.mean((p-t)**2)  # sigmoid is applied here
+            # 修正: 将布尔值 t 显式转换为浮点数 float(t)
+            self.adv_criterion = lambda p,t,w: torch.mean((p-float(t))**2)  # sigmoid is applied here
         elif self.opts['gan'] == 'wgan_gp':
-            self.adv_criterion = lambda p,t,w: (-2*t+1) * torch.mean(p)
+            # 修正: 将布尔值 t 显式转换为浮点数 float(t)
+            self.adv_criterion = lambda p,t,w: (-2*float(t)+1) * torch.mean(p)
         elif self.opts['gan'] == 'gan':
-            self.adv_criterion = lambda p,t,w: -w*(torch.mean(t*torch.log(p+1e-8)) + torch.mean((1-t)*torch.log(1-p+1e-8)))
+            # 修正: 将布尔值 t 显式转换为浮点数 float(t)
+            self.adv_criterion = lambda p,t,w: -w*(torch.mean(float(t)*torch.log(p+1e-8)) + torch.mean((1-float(t))*torch.log(1-p+1e-8)))
         else:
             raise ValueError('Invalid/Unsupported GAN: %s.' % self.opts['gan'])
 
@@ -110,7 +113,9 @@ class PGGAN():
         return 0.0
 
     def _get_data(self, d):
-        return d.data[0] if isinstance(d, Variable) else d
+        if isinstance(d, torch.Tensor):
+            return d.item()
+        return d
 
     def compute_G_loss(self):
         g_adv_loss = self.compute_adv_loss(self.d_fake, True, 1)
@@ -188,7 +193,7 @@ class PGGAN():
             return 0
 
         if hasattr(self, '_d_'):
-            self._d_ = self._d_ * 0.9 + np.clip(torch.mean(self.d_real).data[0], 0.0, 1.0) * 0.1
+            self._d_ = self._d_ * 0.9 + np.clip(torch.mean(self.d_real).item(), 0.0, 1.0) * 0.1
         else:
             self._d_ = 0.0
         strength = 0.2 * max(0, self._d_ - 0.5)**2
@@ -339,28 +344,36 @@ class PGGAN():
 
     def sample(self):
         batch_size = self.z.size(0)
-        n_row = self.rows_map[batch_size]
+        n_row = self.rows_map.get(batch_size, int(np.sqrt(batch_size))) # Fallback for safety
         n_col = int(np.ceil(batch_size / float(n_row)))
         samples = []
         i = j = 0
+        
+        # Detach tensors from the computation graph before converting to numpy
+        fake_samples = self.fake.cpu().detach().numpy()
+        real_samples = self.real.cpu().detach().numpy()
+
         for row in range(n_row):
             one_row = []
             # fake
             for col in range(n_col):
-                one_row.append(self.fake[i].cpu().data.numpy())
-                i += 1
+                if i < fake_samples.shape[0]:
+                    one_row.append(fake_samples[i])
+                    i += 1
             # real
             for col in range(n_col):
-                one_row.append(self.real[j].cpu().data.numpy())
-                j += 1
+                if j < real_samples.shape[0]:
+                    one_row.append(real_samples[j])
+                    j += 1
             samples += [np.concatenate(one_row, axis=2)]
         samples = np.concatenate(samples, axis=1).transpose([1, 2, 0])
 
-        half = samples.shape[1] // 2
-        samples[:, :half, :] = samples[:, :half, :] - np.min(samples[:, :half, :])
-        samples[:, :half, :] = samples[:, :half, :] / np.max(samples[:, :half, :])
-        samples[:, half:, :] = samples[:, half:, :] - np.min(samples[:, half:, :])
-        samples[:, half:, :] = samples[:, half:, :] / np.max(samples[:, half:, :])
+        # Denormalize from [-1, 1] to [0, 1]
+        samples = (samples + 1) / 2.0
+        
+        # 修正: 将最终的numpy数组转换为 [0, 255] 范围的 uint8 类型
+        # 这是图片保存函数最能接受的、最标准的格式
+        samples = (samples * 255).clip(0, 255).astype(np.uint8)
         return samples
 
     def save(self, file_name):
@@ -380,7 +393,7 @@ if __name__ == '__main__':
     parser.add_argument('--g_lr_max', default=1e-3, type=float, help='Generator learning rate')
     parser.add_argument('--d_lr_max', default=1e-3, type=float, help='Discriminator learning rate')
     parser.add_argument('--fake_weight', default=0.1, type=float, help="weight of fake images' loss of D")
-    parser.add_argument('--beta1', default=0, type=float, help='beta1 for adam')
+    parser.add_argument('--beta1', default=0.0, type=float, help='beta1 for adam')
     parser.add_argument('--beta2', default=0.99, type=float, help='beta2 for adam')
     parser.add_argument('--gan', default='lsgan', type=str, help='model: lsgan/wgan_gp/gan, currently only support lsgan or gan with no_noise option.')
     parser.add_argument('--first_resol', default=4, type=int, help='first resolution')
