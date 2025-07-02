@@ -1,5 +1,4 @@
 import torch
-from torch.autograd import Variable
 import sys
 sys.path.append('./models')
 sys.path.append('./utils')
@@ -25,12 +24,12 @@ for name, p in param_D:
 print(G)
 print(D)
 
-G.cuda(1)
-D.cuda(1)
+G.cuda()
+D.cuda()
 data = CelebA()
-z = Variable((torch.rand(3, 512)-0.5)*2).cuda(1)
+z = ((torch.rand(3, 512)-0.5)*2).cuda()
 x = G(z, cur_level=1.2)
-# x = Variable(torch.from_numpy(data(3, size=8))).cuda(1)
+# x = torch.from_numpy(data(3, size=8))).cuda()
 print('x:', x.size())
 d = D(x, cur_level=1.2, gdrop_strength=0.2)
 d = torch.mean(d)
@@ -40,9 +39,9 @@ d.backward()
 print('G:')
 for name, p in G.named_parameters():
 	if p.grad is not None:
-		print(name, p.size(), p.grad.mean().data[0])
+		print(name, p.size(), p.grad.mean().item())
 
 print('D:')
 for name, p in D.named_parameters():
 	if p.grad is not None:
-		print(name, p.size(), p.grad.mean().data[0])
+		print(name, p.size(), p.grad.mean().item())

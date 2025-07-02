@@ -10,7 +10,7 @@ from utils.data import CelebA, RandomNoiseGenerator
 from models.model import Generator, Discriminator
 import argparse
 import numpy as np
-from scipy.misc import imsave
+import imageio
 from utils.logger import Logger
 
 class PGGAN():
@@ -299,7 +299,7 @@ class PGGAN():
             samples = []
             if (it % self.opts['sample_freq'] == 0) or it == total_it-1:
                 samples = self.sample()
-                imsave(os.path.join(self.opts['sample_dir'],
+                imageio.imwrite(os.path.join(self.opts['sample_dir'],
                                     '%dx%d-%s-%s.png' % (cur_resol, cur_resol, phase, str(it).zfill(6))), samples)
 
             # ===tensorboard visualization===
