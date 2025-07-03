@@ -70,7 +70,7 @@ class MinibatchStatConcatLayer(nn.Module):
         if 'group' in self.averaging:
             self.n = int(self.averaging[5:])
         else:
-            assert self.averaging in ['all', 'flat', 'spatial', 'none', 'gpool'], 'Invalid averaging mode'%self.averaging
+            assert self.averaging in ['all', 'flat', 'spatial', 'none', 'gpool'], f'Invalid averaging mode {self.averaging}'
         self.adjusted_std = lambda x, **kwargs: torch.sqrt(torch.mean((x - torch.mean(x, **kwargs)) ** 2, **kwargs) + 1e-8)
 
     def forward(self, x):
@@ -93,7 +93,7 @@ class MinibatchStatConcatLayer(nn.Module):
             vals = torch.FloatTensor([self.adjusted_std(x)])
         else:
             target_shape[1] = self.n
-            vals = vals.view(self.n, self.shape[1]/self.n, self.shape[2], self.shape[3])
+            vals = vals.view(self.n, shape[1]//self.n, shape[2], shape[3])
             vals = mean(vals, axis=0, keepdim=True).view(1, self.n, 1, 1)
         vals = vals.expand(*target_shape)
         return torch.cat([x, vals], 1)
@@ -159,7 +159,9 @@ def resize_activations(v, so):
 
     # 修正: 使用 F.interpolate 替代已废弃的 F.upsample
     if si[2] < so[2]: 
-        assert so[2] % si[2] == 0 and so[2] // si[2] == so[3] // si[3]
+        # assert so[2] % si[2] == 0 and so[2] // si[2] == so[3] // si[3]
+        assert so[2] % si[2] == 0 and so[3] % si[3] == 0 and (so[2] // si[2]) == (so[3] // si[3])
+
         v = F.interpolate(v, scale_factor=so[2]//si[2], mode='nearest')
 
     # Increase feature maps.
@@ -276,18 +278,27 @@ class ReshapeLayer(nn.Module):
         assert reduce(lambda u,v: u*v, self.new_shape) == reduce(lambda u,v: u*v, x.size()[1:])
         return x.view(-1, *self.new_shape)
 
-
-def he_init(layer, nonlinearity='conv2d', param=None):
+# def he_init(layer, nonlinearity='conv2d', param=None):
+#     nonlinearity = nonlinearity.lower()
+#     if nonlinearity not in ['linear', 'conv1d', 'conv2d', 'conv3d', 'relu', 'leaky_relu', 'sigmoid', 'tanh']:
+#         if not hasattr(layer, 'gain') or layer.gain is None:
+#             gain = 0
+#         else:
+#             gain = layer.gain
+#     elif nonlinearity == 'leaky_relu':
+#         assert param is not None, 'Negative_slope(param) should be given.'
+#         gain = calculate_gain(nonlinearity, param)
+#     else:
+#         gain = calculate_gain(nonlinearity)
+#     # 修正: 使用 kaiming_normal_ (带下划线)
+#     kaiming_normal_(layer.weight, a=gain)
+def he_init(layer, nonlinearity='relu', param=None):
     nonlinearity = nonlinearity.lower()
-    if nonlinearity not in ['linear', 'conv1d', 'conv2d', 'conv3d', 'relu', 'leaky_relu', 'sigmoid', 'tanh']:
-        if not hasattr(layer, 'gain') or layer.gain is None:
-            gain = 0
-        else:
-            gain = layer.gain
-    elif nonlinearity == 'leaky_relu':
+    if nonlinearity == 'leaky_relu':
         assert param is not None, 'Negative_slope(param) should be given.'
-        gain = calculate_gain(nonlinearity, param)
+        negative_slope = param
     else:
-        gain = calculate_gain(nonlinearity)
-    # 修正: 使用 kaiming_normal_ (带下划线)
-    kaiming_normal_(layer.weight, a=gain)
+        negative_slope = 0.0  # ReLU 的默认负斜率
+
+    # PyTorch 的 kaiming_normal_ 需要负斜率 a，而不是增益
+    kaiming_normal_(layer.weight, a=negative_slope, mode='fan_in', nonlinearity=nonlinearity)

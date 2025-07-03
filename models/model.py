@@ -96,7 +96,7 @@ class Generator(nn.Module):
         lods.append(net)
         nins.append(NINLayer([], self.get_nf(1), self.num_channels, output_act, output_iact, None, True, self.use_wscale))  # to_rgb layer
 
-        for I in range(2, R):  # following blocks
+        for I in range(2, R+1):  # following blocks
             ic, oc = self.get_nf(I-1), self.get_nf(I)
             layers = [nn.Upsample(scale_factor=2, mode='nearest')]  # upsample
             layers = G_conv(layers, ic, oc, 3, 1, act, iact, negative_slope, False, self.use_wscale, self.use_batchnorm, self.use_pixelnorm)
@@ -178,7 +178,7 @@ class Discriminator(nn.Module):
 
         nins.append(NINLayer([], self.num_channels, self.get_nf(R-1), act, iact, negative_slope, True, self.use_wscale))
 
-        for I in range(R-1, 1, -1):
+        for I in range(R, 1, -1):
             ic, oc = self.get_nf(I), self.get_nf(I-1)
             net = D_conv([], ic, ic, 3, 1, act, iact, negative_slope, False, 
                         self.use_wscale, self.use_gdrop, self.use_layernorm, gdrop_param)

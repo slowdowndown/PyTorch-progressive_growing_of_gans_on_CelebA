@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import torch
 import torch.optim as optim
-from torch.autograd import Variable
+# from torch.autograd import Variable
 # from torch.optim.lr_scheduler import StepLR
 import sys, os, time
 sys.path.append('utils')
@@ -165,10 +165,9 @@ class PGGAN():
         pass
 
     def _numpy2var(self, x):
-        var = Variable(torch.from_numpy(x))
-        if self.use_cuda:
-            var = var.cuda()
-        return var
+        device = torch.device('cuda' if self.use_cuda else 'cpu')
+        tensor = torch.tensor(x, device=device, dtype=torch.float32)
+        return tensor
 
     def _var2numpy(self, var):
         if self.use_cuda:
@@ -274,7 +273,9 @@ class PGGAN():
             if phase == 'stabilize':
                 cur_level = R
             else:
-                cur_level = R + total_it/float(from_it)
+                # cur_level = R + total_it/float(from_it)
+                cur_level = R + (it - from_it) / float(total_it - from_it)
+
             cur_resol = 2 ** int(np.ceil(cur_level+1))
 
             # get a batch noise and real images
